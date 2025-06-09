@@ -8,6 +8,7 @@ import Control.Monad.RWS
 import Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
 import Data.LineCol (LineCol (..))
 import Data.LineColRange
+import Data.Map qualified as Map
 import Data.Maybe
 import Data.Path (AbsPath)
 import Data.Path qualified as Path
@@ -47,6 +48,9 @@ import StaticLS.Logger (logInfo)
 import StaticLS.Maybe
 import StaticLS.ProtoLSP qualified as ProtoLSP
 
+import Glean.Glass.Types qualified as Glass
+import StaticLS.Glean qualified as Glean
+
 -- | Retrieve hover information.
 retrieveHover ::
   forall m.
@@ -55,6 +59,28 @@ retrieveHover ::
   LineCol ->
   m (Maybe Hover)
 retrieveHover path lineCol = do
+  syms <- getGleanSymbols path
+  case Glean.findSymbol lineCol syms of
+    (sym:_) -> do
+      -- TODO: pick the innermost match
+      logInfo $ "hover: " <> T.pack (show sym)
+      case Map.lookup "symbolSignature" sym.symbolX_attributes.unAttributes of
+        Just (Glass.Attribute_aString ty) -> return $ Just $ Hover
+          { _range =
+              Just $ ProtoLSP.lineColRangeToProto $
+                Glean.toRange sym.symbolX_range
+          , _contents = InL $ MarkupContent MarkupKind_PlainText ty
+          }
+        _ -> fallbackHover path lineCol
+    _ -> fallbackHover path lineCol
+
+fallbackHover ::
+  forall m.
+  (MonadIde m, MonadIO m) =>
+  AbsPath ->
+  LineCol ->
+  m (Maybe Hover)
+fallbackHover path lineCol = do
   pos <- lineColToPos path lineCol
   throwIfInThSplice "retriveHover" path pos
   runMaybeT $ do

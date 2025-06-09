@@ -4,6 +4,7 @@ module StaticLS.Glean (
     findSymbol,
     refTargets,
     findRefs,
+    toRange,
   ) where
 
 import Control.Monad.IO.Class
@@ -81,10 +82,13 @@ refTargets wsRoot syms =
 toFileLcRange :: AbsPath -> Glass.LocationRange -> FileLcRange
 toFileLcRange wsRoot locRange =
   FileWith (wsRoot Path.</> Path.filePathToRel (T.unpack path))
-    (mkLineColRange begin end)
+    (toRange locRange.locationRange_range)
   where
   path = Glass.unPath locRange.locationRange_filepath
-  range = locRange.locationRange_range
+
+toRange :: Glass.Range -> LineColRange
+toRange range = mkLineColRange begin end
+  where
   begin = LineCol (pos (range.range_lineBegin-1)) (pos (range.range_columnBegin-1))
   end = LineCol (pos (range.range_lineEnd-1)) (pos (range.range_columnEnd-1))
   pos = mkPos . fromIntegral
