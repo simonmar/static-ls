@@ -73,10 +73,14 @@ import System.Directory (doesFileExist)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Exception qualified as Exception
 
+import StaticLS.Glean qualified as Glean
+import Glean.Glass.Types qualified as Glass
+
 data IdeEnv = IdeEnv
   { fileStateCache :: ConcurrentCache AbsPath FileState
   , hieCache :: ConcurrentCache AbsPath (Maybe CachedHieFile)
   , diffCache :: ConcurrentCache AbsPath (Maybe DiffCache)
+  , gleanSymbolCache :: ConcurrentCache AbsPath Glass.DocumentSymbolIndex
   }
 
 newIdeEnv :: IO IdeEnv
@@ -84,7 +88,8 @@ newIdeEnv = do
   fileStateCache <- ConcurrentCache.new
   hieCache <- ConcurrentCache.new
   diffCache <- ConcurrentCache.new
-  pure $ IdeEnv {fileStateCache, hieCache, diffCache}
+  gleanSymbolCache <- ConcurrentCache.new
+  pure $ IdeEnv {fileStateCache, hieCache, diffCache, gleanSymbolCache}
 
 class HasIdeEnv m where
   getIdeEnv :: m IdeEnv
@@ -132,6 +137,14 @@ getFileState path = do
           Nothing -> pure Semantic.emptyFileState
     )
     env.fileStateCache
+
+getGleanSymbols :: (MonadIde m) => AbsPath -> m Glass.DocumentSymbolIndex
+getGleanSymbols path = do
+  env <- getIdeEnv
+  ConcurrentCache.insert
+    path
+    (Glean.getSymbols path True)
+    env.gleanSymbolCache
 
 getHaskell :: (MonadIde m, MonadIO m) => AbsPath -> m Haskell.Haskell
 getHaskell path = do

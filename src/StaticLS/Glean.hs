@@ -23,7 +23,6 @@ import qualified Glean.Glass.GlassService.Client as Glass
 
 import StaticLS.IDE.FileWith
 import StaticLS.Logger
-import StaticLS.IDE.Monad
 import StaticLS.StaticEnv
 
 glassService :: Service
@@ -39,7 +38,7 @@ svc :: Service -> ThriftService Glass.GlassService
 svc s =  mkThriftService s defCfg
 
 getSymbols ::
-  (MonadIde m, MonadIO m) =>
+  (HasStaticEnv m, MonadIO m) =>
   AbsPath ->
   Bool ->
   m Glass.DocumentSymbolIndex
@@ -90,7 +89,11 @@ toFileLcRange wsRoot locRange =
   end = LineCol (pos (range.range_lineEnd-1)) (pos (range.range_columnEnd-1))
   pos = mkPos . fromIntegral
 
-findRefs :: (MonadIde m, MonadIO m) => AbsPath -> LineCol -> m [FileLcRange]
+findRefs
+  :: (HasStaticEnv m, HasLogger m, MonadIO m)
+  => AbsPath
+  -> LineCol
+  -> m [FileLcRange]
 findRefs path lineCol = do
   staticEnv <- getStaticEnv
   syms <- getSymbols path False

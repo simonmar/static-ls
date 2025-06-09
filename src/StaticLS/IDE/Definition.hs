@@ -53,8 +53,7 @@ getDefinition ::
   m [FileLcRange]
 getDefinition path lineCol = do
   logInfo $ "getDefinition: " <> T.pack (Path.toFilePath path) <> ", " <> T.pack (show lineCol)
-
-  syms <- Glean.getSymbols path True
+  syms <- getGleanSymbols path
   staticEnv <- getStaticEnv
   let targets = Glean.refTargets staticEnv.wsRoot (Glean.findSymbol lineCol syms)
   case Maybe.listToMaybe targets of
