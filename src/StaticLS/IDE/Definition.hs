@@ -29,6 +29,7 @@ import GHC.Types.Name qualified as GHC
 import HieDb (HieDb)
 import HieDb qualified
 import StaticLS.FilePath
+import StaticLS.Glean qualified as Glean
 import StaticLS.HIE.File
 import StaticLS.HIE.Position
 import StaticLS.HieView.Name qualified as HieView.Name
@@ -51,37 +52,47 @@ getDefinition ::
   LineCol ->
   m [FileLcRange]
 getDefinition path lineCol = do
-  pos <- lineColToPos path lineCol
-  throwIfInThSplice "getDefinition" path pos
-  hs <- getHaskell path
-  case Hir.getPersistentModelAtPoint (Range.point pos) hs of
-    Just persistentModelName -> do
-      res <- persistentModelNameToFileLc persistentModelName
-      pure $ maybeToList res
+  logInfo $ "getDefinition: " <> T.pack (Path.toFilePath path) <> ", " <> T.pack (show lineCol)
+
+  syms <- Glean.getSymbols path
+  staticEnv <- getStaticEnv
+  case Glean.findReference staticEnv.wsRoot lineCol syms of
+    Just found -> do
+      logInfo $ "found: " <> T.pack (show found)
+      return [found]
     Nothing -> do
-      let qual = Hir.getQualifiedAtPoint (Range.point pos) hs
-      identifiers <- runMaybeT $ do
-        hieLineCol <- lineColToHieLineCol path lineCol
-        hiePos <- hieLineColToPos path hieLineCol
-        valid <- lift $ isHiePosValid path pos hiePos
-        Monad.guard valid
-        hieView <- getHieView path
-        let identifiers = HieView.Query.fileIdentifiersAtRangeList (Just (LineColRange.point hieLineCol)) hieView
-        pure identifiers
-      identifiers <- pure $ Maybe.fromMaybe [] identifiers
-      fileLcs <- case qual of
-        Right (Just qual) | null identifiers -> do
-          logInfo "no identifiers under cursor found, fallback logic"
-          res <- findDefString qual
-          hieFileLcToFileLcParallel res
-        _ -> do
-          mLocationLinks <- do
-            locations <- traverse identifierToLocation identifiers
-            locations <- pure $ concat locations
-            pure locations
-          pure mLocationLinks
-      convertedFileLcs <- traverse convertPersistentModelFileLc fileLcs
-      pure $ concat convertedFileLcs
+      logInfo "fallback"
+      pos <- lineColToPos path lineCol
+      throwIfInThSplice "getDefinition" path pos
+      hs <- getHaskell path
+      case Hir.getPersistentModelAtPoint (Range.point pos) hs of
+        Just persistentModelName -> do
+          res <- persistentModelNameToFileLc persistentModelName
+          pure $ maybeToList res
+        Nothing -> do
+          let qual = Hir.getQualifiedAtPoint (Range.point pos) hs
+          identifiers <- runMaybeT $ do
+            hieLineCol <- lineColToHieLineCol path lineCol
+            hiePos <- hieLineColToPos path hieLineCol
+            valid <- lift $ isHiePosValid path pos hiePos
+            Monad.guard valid
+            hieView <- getHieView path
+            let identifiers = HieView.Query.fileIdentifiersAtRangeList (Just (LineColRange.point hieLineCol)) hieView
+            pure identifiers
+          identifiers <- pure $ Maybe.fromMaybe [] identifiers
+          fileLcs <- case qual of
+            Right (Just qual) | null identifiers -> do
+              logInfo "no identifiers under cursor found, fallback logic"
+              res <- findDefString qual
+              hieFileLcToFileLcParallel res
+            _ -> do
+              mLocationLinks <- do
+                locations <- traverse identifierToLocation identifiers
+                locations <- pure $ concat locations
+                pure locations
+              pure mLocationLinks
+          convertedFileLcs <- traverse convertPersistentModelFileLc fileLcs
+          pure $ concat convertedFileLcs
  where
   identifierToLocation :: (MonadIde m, MonadIO m) => HieView.Identifier -> m [FileLcRange]
   identifierToLocation ident = do

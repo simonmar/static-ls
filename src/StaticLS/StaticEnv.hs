@@ -26,6 +26,7 @@ import Database.SQLite.Simple (SQLError)
 import HieDb qualified
 import StaticLS.Logger
 import StaticLS.StaticEnv.Options (StaticEnvOptions (..))
+import Util.EventBase ( EventBaseDataplane, withEventBaseDataplane )
 
 type HieDbPath = FilePath
 
@@ -64,6 +65,8 @@ data StaticEnv = StaticEnv
   -- ^ directories to search for source code in order of priority (muttable and imuttable directories)
   , fourmoluCommand :: Maybe FilePath
   -- ^ path to fourmolu binary
+  , eventBase :: EventBaseDataplane
+  -- ^ needed to make Thrift calls to Glean/Glass
   }
 
 class (Monad m) => HasStaticEnv m where
@@ -82,7 +85,7 @@ runStaticEnv :: StaticEnv -> ReaderT StaticEnv IO a -> IO a
 runStaticEnv = flip runReaderT
 
 initStaticEnv :: AbsPath -> StaticEnvOptions -> IO StaticEnv
-initStaticEnv wsRoot staticEnvOptions = do
+initStaticEnv wsRoot staticEnvOptions = withEventBaseDataplane $ \evb -> do
   let databasePath = wsRoot Path.</> (Path.filePathToRel staticEnvOptions.optionHieDbPath)
       hieDirs = fmap ((wsRoot Path.</>) . Path.filePathToRel) (staticEnvOptions.optionHieDirs)
       mutableSrcDirs = fmap ((wsRoot Path.</>) . Path.filePathToRel) (staticEnvOptions.optionSrcDirs)
@@ -100,6 +103,7 @@ initStaticEnv wsRoot staticEnvOptions = do
           , immutableSrcDirs = immutableSrcDirs
           , allSrcDirs = allSrcDirs
           , fourmoluCommand = staticEnvOptions.fourmoluCommand
+          , eventBase = evb
           }
   pure serverStaticEnv
 
