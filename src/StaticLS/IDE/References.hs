@@ -32,6 +32,8 @@ import StaticLS.IDE.Monad
 import StaticLS.Logger
 import StaticLS.StaticEnv
 
+import StaticLS.Glean qualified as Glean
+
 findRefsPos :: (MonadIde m, MonadIO m) => AbsPath -> LineCol -> m [FileRange]
 findRefsPos path lineCol = do
   refs <- findRefs path lineCol
@@ -39,6 +41,8 @@ findRefsPos path lineCol = do
 
 findRefs :: (MonadIde m, MonadIO m) => AbsPath -> LineCol -> m [FileLcRange]
 findRefs path lineCol = do
+  Glean.findRefs path lineCol
+{-
   pos <- lineColToPos path lineCol
   throwIfInThSplice "findRefs" path pos
   hs <- getHaskell path
@@ -78,6 +82,7 @@ findRefs path lineCol = do
       let res = fromMaybe [] mLocList
       newRes <- hieFileLcToFileLcParallel res
       pure newRes
+-}
 
 refRowToLocation :: (HasStaticEnv m, HasLogger m, MonadIO m) => HieDb.RefRow -> MaybeT m FileLcRange
 refRowToLocation refRow = do
